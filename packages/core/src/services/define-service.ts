@@ -1,12 +1,17 @@
 import type { Emitter } from 'mitt';
 import type { Application } from '../application';
 import { emitter as createEmitter } from '../emitter';
+import type { Prettify } from '../type-helper';
 import type { Service, ServiceNotifications } from './services.type';
+
+export type NotificationsFromService<service> = service extends Service<infer notification> ? notification : never;
 
 /**
  * Define a stateless service, also known as `Topic`.
  *
  * @public
+ *
+ * {@label TOPIC}
  */
 export function defineService<notification extends Record<string, unknown> = Record<string, never>>(): () => Service<notification>;
 /**
@@ -15,13 +20,32 @@ export function defineService<notification extends Record<string, unknown> = Rec
  *   derived service instances
  *
  * @public
+ *
+ * {@label STATEFUL_INFERED}
  */
 export function defineService<
 	notification extends Record<string, unknown> = Record<string, never>,
 	service extends Record<string, unknown> = Record<string, unknown>
 >(
 	setup: (app: Application, emitter: Emitter<notification & ServiceNotifications>) => service,
-): (app: Application) => Service<notification> & service;
+): (app: Application) => Prettify<Service<notification> & service>;
+/**
+ * Define a stateful service.
+ * @param setup - a service setup function, the object returned by this function will be used as the base for the
+ *   derived service instances
+ *
+ * @public
+ *
+ * {@label STATEFUL_PRE_TYPED}
+ */
+export function defineService<
+	service extends Service
+>(
+	setup: (
+		app: Application,
+		emitter: Emitter<NotificationsFromService<service> & ServiceNotifications>,
+	) => Omit<service, keyof Service>,
+): (app: Application) => service;
 /**
  * Use one of the overloads.
  *
@@ -31,14 +55,14 @@ export function defineService<
  */
 export function defineService<
 	notification extends Record<string, unknown> = Record<string, never>,
-	service extends Record<string, unknown> = Record<string, unknown>
+	service extends object = object
 >(
 	setup?: (app: Application, emitter: Emitter<notification & ServiceNotifications>) => service,
 ): (app: Application) => Service<notification> & service {
 	return (app): Service<notification> & service => {
 		const emitter = createEmitter<notification & ServiceNotifications>();
 		return {
-			...(setup ? setup(app, emitter) : {} as service),
+			...(setup?.(app, emitter) ?? {} as service),
 			emitter,
 		};
 	};
